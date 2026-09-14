@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pytest-zygote"
-version = "0.1.0"
+version = "0.1.1"
 description = "Run pytest in parallel workers forked from one warm process, so the imports are paid once"
 readme = "README.md"
 license = "MIT"

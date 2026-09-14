@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Fixed the startup banner printing once per worker. The controller's buffered stdout was
+  inherited by every fork, and each child flushed its own copy on exit.
+
 ## 0.1.0
 
 First release.

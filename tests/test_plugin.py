@@ -174,6 +174,13 @@ def test_a_bad_worker_count_is_rejected(pytester):
     result.stderr.fnmatch_lines(["*expected a number or 'auto'*"])
 
 
+def test_the_banner_prints_once(pytester, run):
+    """Children inherit the controller's buffered stdout, so it must be flushed before the fork."""
+    pytester.makepyfile(test_many="\n".join(f"def test_{i}(): assert True" for i in range(20)))
+    result = run(workers=4)
+    assert result.stdout.str().count("workers forked from pid") == 1
+
+
 def test_worker_identity_is_exported(pytester, run):
     pytester.makepyfile(
         test_env="""

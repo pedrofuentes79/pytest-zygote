@@ -172,6 +172,7 @@ class _Controller:
             gc.collect()
             gc.freeze()
         self._announce()
+        self._flush()
         self._spawn(capman)
         try:
             self._dispatch()
@@ -182,6 +183,16 @@ class _Controller:
             self._reap()
             if capman:
                 capman.resume_global_capture()
+
+    def _flush(self) -> None:
+        """Empty the controller's buffers before forking; a child inherits them and flushes its own."""
+        reporter: Any = self.config.pluginmanager.getplugin("terminalreporter")
+        if reporter is not None:
+            with contextlib.suppress(Exception):
+                reporter._tw.flush()
+        for stream in (sys.stdout, sys.stderr):
+            with contextlib.suppress(OSError, ValueError):
+                stream.flush()
 
     def _announce(self) -> None:
         reporter: Any = self.config.pluginmanager.getplugin("terminalreporter")
@@ -242,6 +253,7 @@ class _Controller:
         if not self.queue or self._should_stop() or self.restarts_left <= 0:
             return None
         self.restarts_left -= 1
+        self._flush()
         worker = self._fork_one(self._capman)
         self.workers.append(worker)
         reporter: Any = self.config.pluginmanager.getplugin("terminalreporter")
