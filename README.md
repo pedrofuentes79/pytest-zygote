@@ -39,12 +39,16 @@ matplotlib), peak memory of the whole container:
 **A worker costs ~46 MB here; an xdist worker costs ~490 MB.** It is also faster than xdist,
 because a forked worker starts warm and skips the import that each xdist worker repeats.
 
-The saving is real only because of `gc.freeze()`. CPython's generational collector writes to
-every object header when it runs, which dirties copy-on-write pages and un-shares them one
-collection at a time. `gc.freeze()` moves everything imported so far into a permanent
-generation the collector never walks. Without it a worker's private dirty memory here is
-~195 MB instead of ~22 MB. The technique is Instagram's, upstreamed as `gc.freeze()` in
-Python 3.7.
+Forking alone keeps the heap shared only until a worker runs a full collection: that writes to
+every inherited object's GC header and un-shares the whole heap. An explicit `gc.collect()`
+anywhere in a test, fixture or library triggers one, and so does enough growth in long-lived
+objects. `gc.freeze()` moves everything imported so far into a permanent generation that
+collections never walk, so the heap stays shared either way. On a 1761-test suite whose workers
+never run a full collection, the freeze changes nothing (~510 MB peak at `--workers 4` either
+way); add one `gc.collect()` per worker and the peak goes to ~910 MB without it, each worker
+un-sharing 150-180 MB. The same holds on Python 3.12, 3.13 and 3.14. The freeze costs one
+`gc.collect()` in the controller (~0.2 s there). The technique is Instagram's, upstreamed as
+`gc.freeze()` in Python 3.7.
 
 ## Compared with pytest-xdist
 
@@ -85,7 +89,7 @@ not a silent choice of one.
 |---|---|
 | `--workers N` | run tests in N forked workers, or `auto` for one per core. Default `0`, which leaves pytest alone |
 | `--workers-max-restarts N` | cap how many dead workers get replaced. Default: one per worker; `0` disables |
-| `--workers-no-freeze` | skip `gc.freeze()`. Diagnostic — it costs most of the saving |
+| `--workers-no-freeze` | skip `gc.freeze()`. Diagnostic — it costs the saving once a worker runs a full collection |
 
 The worker count is capped at the number of collected tests. Each worker gets
 `PYTEST_ZYGOTE_WORKER=gw<n>` in its environment, like xdist's `PYTEST_XDIST_WORKER`.

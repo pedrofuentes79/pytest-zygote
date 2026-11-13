@@ -57,7 +57,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--workers-no-freeze",
         action="store_true",
-        help="Skip gc.freeze() before forking; diagnostic, costs most of the memory saving.",
+        help="Skip gc.freeze() before forking (diagnostic): no saving once a worker runs a full GC.",
     )
     group.addoption(
         "--workers-max-restarts",
