@@ -14,8 +14,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         include:
+          # ubuntu-latest (26.04) has no 3.9 build; 3.9 is still supported.
+          - os: ubuntu-24.04
+            python: "3.9"
           # The plugin forks, so macOS is a separate platform, not just another interpreter.
           - os: macos-latest
             python: "3.12"
