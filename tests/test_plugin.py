@@ -137,6 +137,45 @@ def test_a_scoped_fixture_is_torn_down_once_per_worker(pytester, run):
     assert result.stdout.str().count("TEARDOWN-MARKER") == 1
 
 
+def _workers_per_file(pytester) -> dict[str, set[str]]:
+    seen: dict[str, set[str]] = {}
+    for line in (pytester.path / "ran.txt").read_text().split():
+        name, worker = line.split(":")
+        seen.setdefault(name, set()).add(worker)
+    return seen
+
+
+_RECORD = """
+import os, time
+
+def _record(name):
+    time.sleep(0.05)
+    with open("ran.txt", "a") as fh:
+        fh.write(f"{name}:{os.environ['PYTEST_ZYGOTE_WORKER']}\\n")
+"""
+
+
+def test_a_file_stays_on_one_worker(pytester, run):
+    """Each worker then touches only its own modules' objects, which keeps more pages shared."""
+    for name in ("a", "b"):
+        pytester.makepyfile(
+            **{
+                f"test_{name}": _RECORD
+                + "\n".join(f"def test_{i}(): _record({name!r})" for i in range(4))
+            }
+        )
+    run(workers=2).assert_outcomes(passed=8)
+    assert all(len(workers) == 1 for workers in _workers_per_file(pytester).values())
+
+
+def test_an_idle_worker_steals_from_a_long_file(pytester, run):
+    pytester.makepyfile(
+        test_long=_RECORD + "\n".join(f"def test_{i}(): _record('long')" for i in range(12))
+    )
+    run(workers=2).assert_outcomes(passed=12)
+    assert len(_workers_per_file(pytester)["long"]) == 2
+
+
 def test_maxfail_stops_the_run(pytester, run):
     pytester.makepyfile(
         test_many="""

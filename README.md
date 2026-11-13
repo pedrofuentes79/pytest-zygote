@@ -57,7 +57,7 @@ The difference is entirely in how a worker is born.
 | who collects | every worker repeats collection | the controller only |
 | memory per worker* | ~490 MB | ~46 MB |
 | time before the first test | each worker pays the full import | workers start warm |
-| distribution | `load`, `loadscope`, `loadfile`, `loadgroup`, `worksteal`, `each` | dynamic, per test, with a one-test lookahead |
+| distribution | `load`, `loadscope`, `loadfile`, `loadgroup`, `worksteal`, `each` | a file per worker, idle workers steal half of the longest share |
 | workers on other machines | yes, over ssh or a socket | no, this box only |
 | Windows | yes | no — `fork()` only, so Linux and macOS |
 | `--looponfail` | yes | no |

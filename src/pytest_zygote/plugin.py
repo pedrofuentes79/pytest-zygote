@@ -152,7 +152,11 @@ class _Controller:
         self.config = session.config
         self.items = session.items
         self.count = max(1, min(workers, len(session.items)))
-        self.queue = list(range(len(session.items)))
+        files: dict[str, list[int]] = {}
+        for index, item in enumerate(session.items):
+            files.setdefault(str(item.path), []).append(index)
+        self.files = list(files.values())  # not yet handed to any worker
+        self.mine: dict[int, list[int]] = {}  # each worker's remaining share of its current file
         self.workers: list[_Worker] = []
         restarts = self.config.getoption("workers_max_restarts")
         restarts = self.count if restarts is None or restarts < 0 else int(restarts)
@@ -250,7 +254,7 @@ class _Controller:
 
     def _replace(self, dead: _Worker) -> _Worker | None:
         """Fork a fresh worker so a killed one does not strand the tests still queued."""
-        if not self.queue or self._should_stop() or self.restarts_left <= 0:
+        if not self._pending() or self._should_stop() or self.restarts_left <= 0:
             return None
         self.restarts_left -= 1
         self._flush()
@@ -289,16 +293,28 @@ class _Controller:
         if self._should_stop():
             _send(worker.sock, {"t": "stop"})
             return
-        index = worker.committed if worker.committed is not None else self._take()
+        index = worker.committed if worker.committed is not None else self._take(worker)
         if index is None:
             _send(worker.sock, {"t": "stop"})
             return
-        worker.committed = None if self._should_stop() else self._take()
+        worker.committed = None if self._should_stop() else self._take(worker)
         worker.running = index
         _send(worker.sock, {"t": "run", "i": index, "next": worker.committed})
 
-    def _take(self) -> int | None:
-        return self.queue.pop(0) if self.queue else None
+    def _take(self, worker: _Worker) -> int | None:
+        """The rest of this worker's file, else a new file, else the back half of the longest share."""
+        mine = self.mine.setdefault(worker.id, [])
+        if not mine and self.files:
+            mine.extend(self.files.pop(0))
+        if not mine:
+            victim = max(self.mine.values(), key=len)
+            half = len(victim) // 2
+            mine.extend(victim[len(victim) - half :])
+            del victim[len(victim) - half :]
+        return mine.pop(0) if mine else None
+
+    def _pending(self) -> bool:
+        return bool(self.files) or any(self.mine.values())
 
     def _should_stop(self) -> bool:
         return bool(self.session.shouldstop or self.session.shouldfail)
@@ -309,9 +325,12 @@ class _Controller:
         status = 0
         with contextlib.suppress(ChildProcessError):
             _, status = os.waitpid(worker.pid, 0)
+        orphans = self.mine.pop(worker.id, [])
         if worker.committed is not None:
-            self.queue.insert(0, worker.committed)
+            orphans.insert(0, worker.committed)
             worker.committed = None
+        if orphans:
+            self.files.insert(0, orphans)
         if worker.running is None:
             return
         item = self.items[worker.running]
