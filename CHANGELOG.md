@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - A test file now stays on one worker, and a worker with nothing left steals the back half of
   the longest remaining share. A worker then touches only its own modules' objects, so fewer
